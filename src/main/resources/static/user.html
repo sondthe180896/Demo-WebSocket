@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User WebSocket Notifications</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #notifications {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .create-notification { color: green; }
+        .update-notification { color: blue; }
+        .delete-notification { color: red; }
+
+        #user-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input, button {
+            padding: 10px;
+        }
+
+        #notifications > div {
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        #notifications > div::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            transition: width 0.3s ease;
+        }
+        .create-notification::before {
+            background-color: green;
+        }
+        .update-notification::before {
+            background-color: blue;
+        }
+        .delete-notification::before {
+            background-color: red;
+        }
+        #notifications > div:hover::before {
+            width: 6px;
+        }
+        #notifications > div + div {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+<h1>User Management WebSocket</h1>
+
+<form id="user-form">
+    <input type="text" id="name" placeholder="Nhập tên" required>
+    <input type="email" id="email" placeholder="Nhập email" required>
+    <button type="submit">Tạo Người Dùng</button>
+</form>
+
+<div id="notifications">
+    <h2>Thông Báo</h2>
+</div>
+
+<script>
+    let stompClient = null;
+
+    function connect() {
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function (frame) {
+            console.log('Kết nối WebSocket thành công: ' + frame);
+
+            stompClient.subscribe('/topic/users', function (notification) {
+                try {
+                    const userNotification = JSON.parse(notification.body);
+                    displayNotification(userNotification);
+                } catch (error) {
+                    console.error('Lỗi xử lý thông báo:', error);
+                }
+            });
+        }, function (error) {
+            console.error('Lỗi kết nối WebSocket:', error);
+        });
+    }
+
+    function displayNotification(notification) {
+        const notificationsDiv = document.getElementById('notifications');
+        const notificationElement = document.createElement('div');
+
+        notificationElement.innerHTML = `
+                <strong>Hành Động:</strong> ${notification.action}<br>
+                <strong>ID:</strong> ${notification.user.id}<br>
+                <strong>Tên:</strong> ${notification.user.name}<br>
+                <strong>Email:</strong> ${notification.user.email}<br>
+                <strong>Thời Gian:</strong> ${new Date().toLocaleString()}
+            `;
+
+        notificationElement.classList.add(
+            notification.action === 'CREATE' ? 'create-notification' :
+                notification.action === 'UPDATE' ? 'update-notification' :
+                    'delete-notification'
+        );
+
+        // Thêm thông báo mới vào đầu danh sách
+        if (notificationsDiv.children.length > 1) {
+            notificationsDiv.insertBefore(notificationElement, notificationsDiv.children[1]);
+        } else {
+            notificationsDiv.appendChild(notificationElement);
+        }
+    }
+
+    document.getElementById('user-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const name = document.getElementById('name').value;
+        const email = document.getElementById('email').value;
+
+        fetch('/api/users', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, email })
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Tạo user thành công:', data);
+                // Làm sạch form
+                document.getElementById('name').value = '';
+                document.getElementById('email').value = '';
+            })
+            .catch(error => {
+                console.error('Lỗi:', error);
+            });
+    });
+
+    // Kết nối WebSocket khi trang load
+    connect();
+</script>
+</body>
+</html>

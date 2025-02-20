@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Notification Management</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        .notification {
+            border: 1px solid #ddd;
+            margin: 5px 0;
+            padding: 10px;
+        }
+        .new-notification {
+            background-color: #e6f3ff;
+            font-weight: bold;
+        }
+        .create-notification { color: green; }
+        .update-notification { color: blue; }
+        .delete-notification { color: red; }
+    </style>
+</head>
+<body>
+<h1>Notifications</h1>
+<div>
+    <label>User ID: </label>
+    <input type="number" id="userIdInput" value="12">
+    <button onclick="loadNotifications()">Load Notifications</button>
+</div>
+<div id="notificationList"></div>
+
+<script>
+    let socket, stompClient;
+
+    function loadNotifications() {
+        const userIdInput = document.getElementById('userIdInput').value;
+        fetch(`/api/users/${userIdInput}/notifications`)
+            .then(response => response.json())
+            .then(notifications => {
+                const notificationList = document.getElementById('notificationList');
+                notificationList.innerHTML = ''; // Xóa danh sách cũ
+
+                notifications.forEach(notification => {
+                    const notificationDiv = document.createElement('div');
+                    notificationDiv.className = 'notification';
+                    notificationDiv.innerHTML = `
+                            <strong>Action:</strong> ${notification.action}<br>
+                            <strong>User:</strong> ${notification.user.name}<br>
+                            <strong>Time:</strong> ${new Date(notification.timestamp).toLocaleString()}
+                        `;
+                    notificationDiv.classList.add(
+                        notification.action === 'CREATE' ? 'create-notification' :
+                            notification.action === 'UPDATE' ? 'update-notification' :
+                                'delete-notification'
+                    );
+                    notificationList.appendChild(notificationDiv);
+                });
+            });
+    }
+
+    function connectWebSocket() {
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function(frame) {
+            console.log('Connected: ' + frame);
+            stompClient.subscribe('/topic/users', function(message) {
+                const newNotification = JSON.parse(message.body);
+                const userIdInput = document.getElementById('userIdInput').value;
+
+                // Chỉ hiển thị thông báo nếu UserId khớp
+                if (newNotification.user.id == userIdInput) {
+                    const notificationList = document.getElementById('notificationList');
+
+                    const notificationDiv = document.createElement('div');
+                    notificationDiv.className = 'notification new-notification';
+                    notificationDiv.innerHTML = `
+                            <strong>NEW Notification</strong><br>
+                            <strong>Action:</strong> ${newNotification.action}<br>
+                            <strong>User:</strong> ${newNotification.user.name}<br>
+                            <strong>Time:</strong> ${new Date(newNotification.timestamp).toLocaleString()}
+                        `;
+
+                    notificationList.insertBefore(notificationDiv, notificationList.firstChild);
+                }
+            });
+        });
+    }
+
+    window.onload = function() {
+        loadNotifications();
+        connectWebSocket();
+    };
+</script>
+</body>
+</html>
